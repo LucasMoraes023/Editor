@@ -1,0 +1,101 @@
+name: Android CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests and build debug APK
+        run: ./gradlew --no-daemon :core:test :app:assembleDebug
+
+      - name: Run instrumented tests on API 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+
+      - name: Prepare optional release signing
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Release signing is not configured; skipping release APK."
+            exit 0
+          fi
+
+          keystore_path="$RUNNER_TEMP/vortex-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          {
+            printf 'storeFile=%s\n' "$keystore_path"
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > keystore.properties
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build signed release APK
+        if: steps.signing.outputs.configured == 'true'
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Upload debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vortex-video-studio-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload signed release APK
+        if: steps.signing.outputs.configured == 'true' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vortex-video-studio-release
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Add build summary
+        if: always()
+        run: |
+          {
+            echo '## Vortex Video Studio'
+            echo '- Debug APK: `app/build/outputs/apk/debug/app-debug.apk` (uploaded as `vortex-video-studio-debug` when produced).'
+            if [[ "${{ steps.signing.outputs.configured }}" == "true" && "${{ job.status }}" == "success" ]]; then
+              echo '- Signed release APK: uploaded as `vortex-video-studio-release`.'
+            else
+              echo '- Signed release APK: not produced (signing secrets are absent or a job step failed).'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
