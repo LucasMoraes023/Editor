@@ -110,7 +110,25 @@ object JsonCodec {
         private fun num(): Json {
             val st = i
             if (s[i] == '-') i++
-            while (i < s.length && (s[i].isDigit() || s[i] == '.' || s[i] == 'e' || s[i] == 'E' || s[i] == '+' || s[i] == '-')) i++
+            if (i >= s.length) fail("número incompleto")
+            if (s[i] == '0') {
+                i++
+            } else if (s[i].isDigit()) {
+                while (i < s.length && s[i].isDigit()) i++
+            } else {
+                fail("número inválido")
+            }
+            if (i < s.length && s[i] == '.') {
+                i++
+                if (i >= s.length || !s[i].isDigit()) fail("parte fracionária inválida")
+                while (i < s.length && s[i].isDigit()) i++
+            }
+            if (i < s.length && (s[i] == 'e' || s[i] == 'E')) {
+                i++
+                if (i < s.length && (s[i] == '+' || s[i] == '-')) i++
+                if (i >= s.length || !s[i].isDigit()) fail("expoente inválido")
+                while (i < s.length && s[i].isDigit()) i++
+            }
             return Json.Num(s.substring(st, i).toDoubleOrNull() ?: fail("número inválido"))
         }
 

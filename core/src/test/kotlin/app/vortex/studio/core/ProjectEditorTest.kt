@@ -75,4 +75,16 @@ class ProjectEditorTest {
         e.exec("v") { Edits.setVolume(it, "c1", 0.3f) }
         assertEquals(99_999L, e.project.modifiedAtMs)
     }
+
+    @Test fun modifiedTimestamp_updatesOnUndoRedo() {
+        val e = editor(); now = 111_000L
+        e.exec("v") { Edits.setVolume(it, "c1", 0.5f) }
+        assertEquals(111_000L, e.project.modifiedAtMs)
+        now = 222_000L
+        assertTrue(e.undo())
+        assertEquals(222_000L, e.project.modifiedAtMs)
+        now = 333_000L
+        assertTrue(e.redo())
+        assertEquals(333_000L, e.project.modifiedAtMs)
+    }
 }

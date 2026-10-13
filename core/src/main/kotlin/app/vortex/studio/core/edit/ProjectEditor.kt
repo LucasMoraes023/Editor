@@ -58,14 +58,16 @@ class ProjectEditor(
     fun undo(): Boolean {
         val e = undoStack.removeLastOrNull() ?: return false
         redoStack.addLast(Entry(e.label, project, null, clock()))
-        project = e.state
+        val now = clock()
+        project = e.state.copy(modifiedAtMs = now)
         return true
     }
 
     fun redo(): Boolean {
         val e = redoStack.removeLastOrNull() ?: return false
         undoStack.addLast(Entry(e.label, project, null, clock()))
-        project = e.state
+        val now = clock()
+        project = e.state.copy(modifiedAtMs = now)
         return true
     }
 

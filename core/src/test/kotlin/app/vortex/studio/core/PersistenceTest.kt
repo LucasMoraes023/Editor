@@ -28,7 +28,7 @@ class JsonCodecTest {
     }
 
     @Test fun invalidDocuments_throwJsonException() {
-        for (bad in listOf("", "{", "[1,", "{\"a\" 1}", "nul", "\"abc", "12 13", "{\"a\":}", "[1 2]", "{1:2}", "\"\\x\"")) {
+        for (bad in listOf("", "{", "[1,", "{\"a\" 1}", "nul", "\"abc", "12 13", "{\"a\":}", "[1 2]", "{1:2}", "\"\\x\"", "01", "1.", "1e", "-01", "1e+") ) {
             expectThrows<JsonException> { JsonCodec.parse(bad) }
         }
         expectThrows<JsonException> { JsonCodec.parse("[".repeat(100) + "]".repeat(100)) }   // aninhamento excessivo
